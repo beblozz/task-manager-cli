@@ -1,0 +1,9 @@
+build/
+cmake-build-*/
+.vscode/
+.idea/
+*.exe
+*.o
+task_manager
+tasks.json
+tasks.csv
