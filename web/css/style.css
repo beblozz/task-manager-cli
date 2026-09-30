@@ -1,0 +1,238 @@
+:root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --text: #1f2328;
+    --muted: #6b7280;
+    --border: #d9dce1;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --danger: #dc2626;
+    --success: #16a34a;
+    --tag-bg: #e8effd;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #16181d;
+        --card: #1f2229;
+        --text: #e6e8eb;
+        --muted: #9aa1ac;
+        --border: #343842;
+        --accent: #3b82f6;
+        --accent-hover: #60a5fa;
+        --danger: #f87171;
+        --success: #4ade80;
+        --tag-bg: #25324d;
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+}
+
+.container {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 32px 16px;
+}
+
+h1 {
+    margin: 0 0 20px;
+    font-size: 26px;
+}
+
+.card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.row {
+    display: flex;
+    gap: 10px;
+}
+
+.row input {
+    flex: 1;
+    min-width: 0;
+}
+
+input[type="text"],
+input[type="date"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+}
+
+input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+
+button {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: white;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+button:hover {
+    background: var(--accent-hover);
+}
+
+button.small {
+    padding: 2px 8px;
+    font-size: 13px;
+}
+
+.error {
+    margin: 0;
+    color: var(--danger);
+}
+
+.error:empty {
+    display: none;
+}
+
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.toolbar input[type="text"] {
+    flex: 1;
+    min-width: 160px;
+}
+
+.toolbar label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.link {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.link:hover {
+    text-decoration: underline;
+}
+
+.tag-filter {
+    color: var(--muted);
+}
+
+.task-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.task {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+}
+
+.task-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.task-title {
+    word-wrap: break-word;
+}
+
+.task.done .task-title {
+    text-decoration: line-through;
+    color: var(--muted);
+}
+
+.task-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.task.overdue .deadline {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.tag {
+    background: var(--tag-bg);
+    color: var(--accent);
+    padding: 1px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.actions {
+    display: flex;
+    gap: 6px;
+}
+
+.btn-done {
+    background: var(--success);
+}
+
+.btn-delete {
+    background: var(--danger);
+}
+
+.btn-done:hover,
+.btn-delete:hover {
+    opacity: 0.85;
+}
+
+.empty {
+    text-align: center;
+    color: var(--muted);
+}
+
+.hidden {
+    display: none;
+}
+
+@media (max-width: 480px) {
+    .row {
+        flex-direction: column;
+    }
+}

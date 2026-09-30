@@ -1,6 +1,11 @@
 # Task Manager CLI
 
-Консольный менеджер задач на C++17.
+Менеджер задач на C++17: консольная версия и веб-интерфейс.
+
+Логика (задачи, поиск, JSON/CSV) написана на C++ один раз и используется в двух программах:
+
+- `task_manager` — консольное меню
+- `task_web` — маленький HTTP-сервер на C++, который отдаёт страницу (HTML/CSS/JS) и JSON API
 
 ## Возможности
 
@@ -12,6 +17,8 @@
 - сохранение и загрузка в JSON
 - экспорт и импорт в CSV
 - обработка ошибок ввода и ошибок файлов
+- поиск без учёта регистра, в том числе для русских букв
+- веб-интерфейс со светлой и тёмной темой
 
 ## Сборка
 
@@ -25,16 +32,39 @@ cmake --build .
 Или без CMake:
 
 ```bash
-g++ -std=c++17 -Wall -Wextra src/*.cpp -o task_manager
+g++ -std=c++17 -Wall -Wextra src/main.cpp src/Task.cpp src/TaskManager.cpp -o task_manager
+g++ -std=c++17 src/server.cpp src/Task.cpp src/TaskManager.cpp -o task_web -pthread
 ```
+
+На Windows (MinGW) для `task_web` добавь в конец `-lws2_32`.
 
 ## Запуск
 
+Консоль:
+
 ```bash
-./task_manager
+./build/task_manager
 ```
 
-При запуске программа загружает `tasks.json` (если он есть), при выходе сохраняет задачи обратно.
+Веб-версия (запускать из корня проекта, чтобы сервер нашёл папку `web`):
+
+```bash
+./build/task_web
+```
+
+Потом открыть http://localhost:8080
+
+Обе программы хранят задачи в `tasks.json` в текущей папке.
+
+## API
+
+| Метод  | Путь                    | Что делает                                   |
+|--------|-------------------------|----------------------------------------------|
+| GET    | `/api/tasks`            | список задач, параметры `q`, `tag`, `sort=deadline`, `overdue=1` |
+| POST   | `/api/tasks`            | добавить задачу (`title`, `deadline`, `tags`) |
+| POST   | `/api/tasks/{id}/done`  | отметить выполненной                         |
+| DELETE | `/api/tasks/{id}`       | удалить                                      |
+| GET    | `/api/export/csv`       | скачать CSV                                  |
 
 ## Пример
 
@@ -57,7 +87,14 @@ Task added with id 1
 src/
   Task.h / Task.cpp               класс задачи
   TaskManager.h / TaskManager.cpp список задач, поиск, JSON и CSV
-  main.cpp                        меню и ввод пользователя
+  main.cpp                        консольное меню
+  server.cpp                      HTTP-сервер и API
+web/
+  index.html                      разметка страницы
+  css/style.css                   стили
+  js/app.js                       запросы к API и отрисовка списка
+third_party/
+  httplib.h                       cpp-httplib (MIT), HTTP-сервер в одном заголовке
 ```
 
 ## Что планирую добавить
