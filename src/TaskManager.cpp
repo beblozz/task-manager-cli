@@ -6,14 +6,6 @@
 #include <sstream>
 #include <stdexcept>
 
-static std::string toLower(const std::string& s) {
-    std::string result = s;
-    for (char& c : result) {
-        c = std::tolower(static_cast<unsigned char>(c));
-    }
-    return result;
-}
-
 static std::string escapeJson(const std::string& s) {
     std::string result;
     for (char c : s) {
@@ -307,35 +299,41 @@ std::vector<Task> TaskManager::getOverdue(const std::string& today) const {
     return result;
 }
 
+std::string TaskManager::toJson(const std::vector<Task>& list) {
+    std::stringstream out;
+    out << "[\n";
+    for (size_t i = 0; i < list.size(); i++) {
+        const Task& task = list[i];
+        out << "  {\n";
+        out << "    \"id\": " << task.getId() << ",\n";
+        out << "    \"title\": \"" << escapeJson(task.getTitle()) << "\",\n";
+        out << "    \"deadline\": \"" << escapeJson(task.getDeadline()) << "\",\n";
+        out << "    \"done\": " << (task.isDone() ? "true" : "false") << ",\n";
+        out << "    \"tags\": [";
+        std::vector<std::string> tags = task.getTags();
+        for (size_t j = 0; j < tags.size(); j++) {
+            out << "\"" << escapeJson(tags[j]) << "\"";
+            if (j + 1 < tags.size()) {
+                out << ", ";
+            }
+        }
+        out << "]\n";
+        out << "  }";
+        if (i + 1 < list.size()) {
+            out << ",";
+        }
+        out << "\n";
+    }
+    out << "]\n";
+    return out.str();
+}
+
 void TaskManager::saveToJson(const std::string& filename) const {
     std::ofstream file(filename);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file for writing: " + filename);
     }
-    file << "[\n";
-    for (size_t i = 0; i < tasks.size(); i++) {
-        const Task& task = tasks[i];
-        file << "  {\n";
-        file << "    \"id\": " << task.getId() << ",\n";
-        file << "    \"title\": \"" << escapeJson(task.getTitle()) << "\",\n";
-        file << "    \"deadline\": \"" << escapeJson(task.getDeadline()) << "\",\n";
-        file << "    \"done\": " << (task.isDone() ? "true" : "false") << ",\n";
-        file << "    \"tags\": [";
-        std::vector<std::string> tags = task.getTags();
-        for (size_t j = 0; j < tags.size(); j++) {
-            file << "\"" << escapeJson(tags[j]) << "\"";
-            if (j + 1 < tags.size()) {
-                file << ", ";
-            }
-        }
-        file << "]\n";
-        file << "  }";
-        if (i + 1 < tasks.size()) {
-            file << ",";
-        }
-        file << "\n";
-    }
-    file << "]\n";
+    file << toJson(tasks);
 }
 
 void TaskManager::loadFromJson(const std::string& filename) {
@@ -422,6 +420,40 @@ void TaskManager::loadFromCsv(const std::string& filename) {
     }
     tasks = loaded;
     updateNextId();
+}
+
+std::string TaskManager::toLower(const std::string& s) {
+    std::string result;
+    for (size_t i = 0; i < s.size(); i++) {
+        unsigned char c = s[i];
+        if (c < 128) {
+            result += static_cast<char>(std::tolower(c));
+            continue;
+        }
+        if (i + 1 < s.size()) {
+            unsigned char next = s[i + 1];
+            if (c == 0xD0 && next >= 0x90 && next <= 0x9F) {
+                result += static_cast<char>(0xD0);
+                result += static_cast<char>(next + 0x20);
+                i++;
+                continue;
+            }
+            if (c == 0xD0 && next >= 0xA0 && next <= 0xAF) {
+                result += static_cast<char>(0xD1);
+                result += static_cast<char>(next - 0x20);
+                i++;
+                continue;
+            }
+            if (c == 0xD0 && next == 0x81) {
+                result += static_cast<char>(0xD1);
+                result += static_cast<char>(0x91);
+                i++;
+                continue;
+            }
+        }
+        result += static_cast<char>(c);
+    }
+    return result;
 }
 
 bool TaskManager::isValidDate(const std::string& date) {

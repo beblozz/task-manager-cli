@@ -25,6 +25,8 @@ public:
     void loadFromCsv(const std::string& filename);
 
     static bool isValidDate(const std::string& date);
+    static std::string toJson(const std::vector<Task>& list);
+    static std::string toLower(const std::string& s);
 
 private:
     std::vector<Task> tasks;
