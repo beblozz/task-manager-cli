@@ -10,19 +10,30 @@
     <main class="container">
         <h1>Task Manager</h1>
 
+        <!-- Форма добавления задачи -->
         <form id="task-form" class="card">
             <input type="text" id="title" placeholder="Что нужно сделать?" required>
             <div class="row">
                 <input type="date" id="deadline">
-                <input type="text" id="tags" placeholder="Теги через пробел">
+                <select id="priority">
+                    <option value="1">Низкий</option>
+                    <option value="2" selected>Средний</option>
+                    <option value="3">Высокий</option>
+                </select>
             </div>
+            <input type="text" id="tags" placeholder="Теги через пробел">
             <button type="submit">Добавить</button>
             <p id="error" class="error"></p>
         </form>
 
+        <!-- Поиск, сортировка и фильтры -->
         <div class="card toolbar">
             <input type="text" id="search" placeholder="Поиск...">
-            <label><input type="checkbox" id="sort"> По дедлайну</label>
+            <select id="sort">
+                <option value="">Без сортировки</option>
+                <option value="deadline">По дедлайну</option>
+                <option value="priority">По приоритету</option>
+            </select>
             <label><input type="checkbox" id="overdue"> Просроченные</label>
             <a href="/api/export/csv" class="link">Скачать CSV</a>
         </div>
@@ -32,6 +43,7 @@
             <button type="button" id="clear-tag" class="small">✕</button>
         </p>
 
+        <!-- Список задач заполняет js/app.js -->
         <ul id="task-list" class="task-list"></ul>
         <p id="empty" class="empty hidden">Задач нет</p>
     </main>

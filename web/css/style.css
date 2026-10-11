@@ -9,6 +9,8 @@
     --danger: #dc2626;
     --success: #16a34a;
     --tag-bg: #e8effd;
+    --warning: #d97706;
+    --badge-bg: #eef0f3;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,6 +25,8 @@
         --danger: #f87171;
         --success: #4ade80;
         --tag-bg: #25324d;
+        --warning: #fbbf24;
+        --badge-bg: #2b2f38;
     }
 }
 
@@ -68,13 +72,16 @@ form {
     gap: 10px;
 }
 
-.row input {
+.row input,
+.row select,
+.row button {
     flex: 1;
     min-width: 0;
 }
 
 input[type="text"],
-input[type="date"] {
+input[type="date"],
+select {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--border);
@@ -84,7 +91,12 @@ input[type="date"] {
     font: inherit;
 }
 
-input:focus {
+select {
+    cursor: pointer;
+}
+
+input:focus,
+select:focus {
     outline: 2px solid var(--accent);
     outline-offset: -1px;
 }
@@ -128,6 +140,10 @@ button.small {
 .toolbar input[type="text"] {
     flex: 1;
     min-width: 160px;
+}
+
+.toolbar select {
+    width: auto;
 }
 
 .toolbar label {
@@ -177,6 +193,30 @@ button.small {
     word-wrap: break-word;
 }
 
+/* Цветная полоска слева показывает приоритет */
+.task.priority-3 {
+    border-left: 4px solid var(--danger);
+}
+
+.task.priority-1 {
+    border-left: 4px solid var(--border);
+}
+
+.task.priority-2 {
+    border-left: 4px solid var(--accent);
+}
+
+.badge {
+    padding: 1px 8px;
+    border-radius: 10px;
+    background: var(--badge-bg);
+}
+
+.task.priority-3 .priority-badge {
+    color: var(--danger);
+    font-weight: 600;
+}
+
 .task.done .task-title {
     text-decoration: line-through;
     color: var(--muted);
@@ -217,9 +257,32 @@ button.small {
     background: var(--danger);
 }
 
+.btn-edit {
+    background: var(--warning);
+}
+
+.btn-cancel {
+    background: var(--muted);
+}
+
 .btn-done:hover,
-.btn-delete:hover {
+.btn-edit:hover,
+.btn-delete:hover,
+.btn-cancel:hover {
     opacity: 0.85;
+}
+
+.task.editing {
+    border-left: 4px solid var(--warning);
+}
+
+.edit-form {
+    flex: 1;
+}
+
+.edit-form .btn-cancel {
+    padding: 10px 16px;
+    font-size: inherit;
 }
 
 .empty {

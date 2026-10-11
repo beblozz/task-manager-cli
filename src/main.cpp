@@ -1,37 +1,38 @@
-#include <ctime>
 #include <fstream>
 #include <iostream>
-#include <sstream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "TaskManager.h"
+#include "Utils.h"
 
 const std::string DEFAULT_FILE = "tasks.json";
+const std::string DEFAULT_CSV = "tasks.csv";
 
-std::string getToday() {
-    std::time_t now = std::time(nullptr);
-    std::tm* local = std::localtime(&now);
-    char buffer[11];
-    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", local);
-    return std::string(buffer);
-}
+// Своё исключение для конца ввода (Ctrl+Z / Ctrl+D).
+// Раньше мы узнавали его по тексту сообщения — это хрупко:
+// поменяешь текст, и проверка сломается. Отдельный тип надёжнее.
+class InputClosedError : public std::runtime_error {
+public:
+    InputClosedError() : std::runtime_error("Input closed") {}
+};
 
 std::string readLine(const std::string& prompt) {
     std::cout << prompt;
     std::string line;
     if (!std::getline(std::cin, line)) {
-        throw std::runtime_error("Input closed");
+        throw InputClosedError();
     }
     return line;
 }
 
-int readInt(const std::string& prompt) {
-    std::string line = readLine(prompt);
+int parseInt(const std::string& line) {
     try {
         size_t pos = 0;
         int value = std::stoi(line, &pos);
+        // "12abc" — не число, хотя stoi прочитал бы 12
         if (pos != line.size()) {
             throw std::invalid_argument("extra symbols");
         }
@@ -41,19 +42,22 @@ int readInt(const std::string& prompt) {
     }
 }
 
-std::vector<std::string> parseTags(const std::string& line) {
-    std::vector<std::string> tags;
-    std::stringstream ss(line);
-    std::string tag;
-    while (ss >> tag) {
-        if (tag[0] == '#') {
-            tag = tag.substr(1);
-        }
-        if (!tag.empty()) {
-            tags.push_back(tag);
-        }
+int readInt(const std::string& prompt) {
+    return parseInt(readLine(prompt));
+}
+
+// Пустой ввод = std::nullopt ("не менять" или "по умолчанию")
+std::optional<int> readOptionalInt(const std::string& prompt) {
+    std::string line = readLine(prompt);
+    if (line.empty()) {
+        return std::nullopt;
     }
-    return tags;
+    return parseInt(line);
+}
+
+std::string readFilename(const std::string& defaultName) {
+    std::string filename = readLine("File name (empty = " + defaultName + "): ");
+    return filename.empty() ? defaultName : filename;
 }
 
 void printTasks(const std::vector<Task>& tasks) {
@@ -70,17 +74,56 @@ void printMenu() {
     std::cout << "\n===== Task Manager =====\n";
     std::cout << "1. Add task\n";
     std::cout << "2. Show all tasks\n";
-    std::cout << "3. Remove task\n";
-    std::cout << "4. Mark task as done\n";
-    std::cout << "5. Search by text\n";
-    std::cout << "6. Search by tag\n";
-    std::cout << "7. Sort by deadline\n";
-    std::cout << "8. Show overdue tasks\n";
-    std::cout << "9. Save to JSON\n";
-    std::cout << "10. Load from JSON\n";
-    std::cout << "11. Export to CSV\n";
-    std::cout << "12. Import from CSV\n";
+    std::cout << "3. Edit task\n";
+    std::cout << "4. Remove task\n";
+    std::cout << "5. Mark task as done\n";
+    std::cout << "6. Search by text\n";
+    std::cout << "7. Search by tag\n";
+    std::cout << "8. Sort by deadline\n";
+    std::cout << "9. Sort by priority\n";
+    std::cout << "10. Show overdue tasks\n";
+    std::cout << "11. Save to JSON\n";
+    std::cout << "12. Load from JSON\n";
+    std::cout << "13. Export to CSV\n";
+    std::cout << "14. Import from CSV\n";
     std::cout << "0. Exit\n";
+}
+
+void addTask(TaskManager& manager) {
+    std::string title = readLine("Title: ");
+    std::string deadline = readLine("Deadline (YYYY-MM-DD, empty to skip): ");
+    std::string tagsLine = readLine("Tags (separated by space): ");
+    std::optional<int> priority = readOptionalInt("Priority (1 low, 2 medium, 3 high, empty = 2): ");
+    int id = manager.addTask(title, deadline, parseTags(tagsLine),
+                             priority.value_or(Task::PRIORITY_MEDIUM));
+    std::cout << "Task added with id " << id << "\n";
+}
+
+void editTask(TaskManager& manager) {
+    int id = readInt("Task id: ");
+    // getTask бросит исключение, если задачи нет — узнаем об этом сразу,
+    // а не после того, как человек введёт все поля
+    std::cout << "Now: " << manager.getTask(id).toString() << "\n";
+    std::cout << "Press Enter to keep the current value\n";
+
+    std::optional<std::string> title;
+    std::string line = readLine("New title: ");
+    if (!line.empty()) {
+        title = line;
+    }
+
+    std::optional<std::string> deadline;
+    line = readLine("New deadline (YYYY-MM-DD, '-' to remove): ");
+    if (line == "-") {
+        deadline = "";
+    } else if (!line.empty()) {
+        deadline = line;
+    }
+
+    std::optional<int> priority = readOptionalInt("New priority (1 low, 2 medium, 3 high): ");
+
+    manager.editTask(id, title, deadline, priority);
+    std::cout << "Task updated: " << manager.getTask(id).toString() << "\n";
 }
 
 int main() {
@@ -94,6 +137,7 @@ int main() {
             manager.loadFromJson(DEFAULT_FILE);
             std::cout << "Loaded " << manager.getAll().size() << " tasks from " << DEFAULT_FILE << "\n";
         } catch (const std::exception& e) {
+            // Не затираем испорченный файл при выходе
             std::cout << "Could not load " << DEFAULT_FILE << ": " << e.what() << "\n";
             std::cout << "Auto save is off, fix the file or save manually\n";
             autoSave = false;
@@ -106,35 +150,27 @@ int main() {
         try {
             int choice = readInt("> ");
             switch (choice) {
-            case 1: {
-                std::string title = readLine("Title: ");
-                std::string deadline = readLine("Deadline (YYYY-MM-DD, empty to skip): ");
-                std::string tagsLine = readLine("Tags (separated by space): ");
-                int id = manager.addTask(title, deadline, parseTags(tagsLine));
-                std::cout << "Task added with id " << id << "\n";
+            case 1:
+                addTask(manager);
                 break;
-            }
             case 2:
                 printTasks(manager.getAll());
                 break;
-            case 3: {
-                int id = readInt("Task id: ");
-                manager.removeTask(id);
+            case 3:
+                editTask(manager);
+                break;
+            case 4:
+                manager.removeTask(readInt("Task id: "));
                 std::cout << "Task removed\n";
                 break;
-            }
-            case 4: {
-                int id = readInt("Task id: ");
-                manager.markDone(id);
+            case 5:
+                manager.markDone(readInt("Task id: "));
                 std::cout << "Task marked as done\n";
                 break;
-            }
-            case 5: {
-                std::string text = readLine("Text: ");
-                printTasks(manager.searchByText(text));
+            case 6:
+                printTasks(manager.searchByText(readLine("Text: ")));
                 break;
-            }
-            case 6: {
+            case 7: {
                 std::vector<std::string> tags = parseTags(readLine("Tag: "));
                 if (tags.empty()) {
                     throw std::invalid_argument("Tag cannot be empty");
@@ -142,61 +178,45 @@ int main() {
                 printTasks(manager.searchByTag(tags[0]));
                 break;
             }
-            case 7:
+            case 8:
                 printTasks(manager.getSortedByDeadline());
                 break;
-            case 8:
+            case 9:
+                printTasks(manager.getSortedByPriority());
+                break;
+            case 10:
                 std::cout << "Today: " << getToday() << "\n";
                 printTasks(manager.getOverdue(getToday()));
                 break;
-            case 9: {
-                std::string filename = readLine("File name (empty = tasks.json): ");
-                if (filename.empty()) {
-                    filename = DEFAULT_FILE;
-                }
+            case 11: {
+                std::string filename = readFilename(DEFAULT_FILE);
                 manager.saveToJson(filename);
                 std::cout << "Saved to " << filename << "\n";
                 break;
             }
-            case 10: {
-                std::string filename = readLine("File name (empty = tasks.json): ");
-                if (filename.empty()) {
-                    filename = DEFAULT_FILE;
-                }
-                manager.loadFromJson(filename);
+            case 12:
+                manager.loadFromJson(readFilename(DEFAULT_FILE));
                 std::cout << "Loaded " << manager.getAll().size() << " tasks\n";
                 break;
-            }
-            case 11: {
-                std::string filename = readLine("File name (empty = tasks.csv): ");
-                if (filename.empty()) {
-                    filename = "tasks.csv";
-                }
+            case 13: {
+                std::string filename = readFilename(DEFAULT_CSV);
                 manager.saveToCsv(filename);
                 std::cout << "Exported to " << filename << "\n";
                 break;
             }
-            case 12: {
-                std::string filename = readLine("File name (empty = tasks.csv): ");
-                if (filename.empty()) {
-                    filename = "tasks.csv";
-                }
-                manager.loadFromCsv(filename);
+            case 14:
+                manager.loadFromCsv(readFilename(DEFAULT_CSV));
                 std::cout << "Imported " << manager.getAll().size() << " tasks\n";
                 break;
-            }
             case 0:
                 running = false;
                 break;
             default:
                 std::cout << "Unknown command\n";
             }
-        } catch (const std::runtime_error& e) {
-            if (std::string(e.what()) == "Input closed") {
-                running = false;
-            } else {
-                std::cout << "Error: " << e.what() << "\n";
-            }
+        } catch (const InputClosedError&) {
+            // Порядок catch важен: сначала конкретный тип, потом общий
+            running = false;
         } catch (const std::exception& e) {
             std::cout << "Error: " << e.what() << "\n";
         }
