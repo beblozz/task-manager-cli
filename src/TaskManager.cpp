@@ -6,6 +6,9 @@
 #include <sstream>
 #include <stdexcept>
 
+// ===== Вспомогательные функции (видны только в этом файле) =====
+
+// Экранирование для JSON: кавычка внутри строки должна стать \"
 static std::string escapeJson(const std::string& s) {
     std::string result;
     for (char c : s) {
@@ -22,6 +25,8 @@ static std::string escapeJson(const std::string& s) {
     return result;
 }
 
+// Экранирование для CSV: поле с запятой или кавычкой берём в кавычки,
+// а кавычки внутри удваиваем (так делает Excel)
 static std::string escapeCsv(const std::string& s) {
     if (s.find(',') == std::string::npos && s.find('"') == std::string::npos) {
         return s;
@@ -38,6 +43,7 @@ static std::string escapeCsv(const std::string& s) {
     return result;
 }
 
+// Делит строку CSV по запятым, но запятые внутри кавычек не считает
 static std::vector<std::string> splitCsvLine(const std::string& line) {
     std::vector<std::string> fields;
     std::string current;
@@ -73,6 +79,9 @@ static std::vector<std::string> splitCsvLine(const std::string& line) {
     return fields;
 }
 
+// Простой разборщик JSON, который понимает только наш формат:
+// массив объектов с полями id, title, deadline, done, priority, tags.
+// Идёт по тексту символ за символом, pos — текущая позиция.
 class JsonReader {
 public:
     JsonReader(const std::string& text) : text(text), pos(0) {}
@@ -83,6 +92,7 @@ public:
         }
     }
 
+    // Посмотреть следующий символ, не сдвигаясь
     char peek() {
         skipSpaces();
         if (pos >= text.size()) {
@@ -91,6 +101,7 @@ public:
         return text[pos];
     }
 
+    // Следующим обязан быть символ c, иначе файл испорчен
     void expect(char c) {
         if (peek() != c) {
             throw std::runtime_error(std::string("JSON: expected '") + c + "' at position " + std::to_string(pos));
@@ -169,6 +180,8 @@ public:
     }
 
     Task readTask() {
+        // Task() по умолчанию имеет средний приоритет. Поэтому старые файлы
+        // версии 1.0, где поля priority ещё не было, загружаются без ошибок.
         Task task;
         expect('{');
         if (peek() == '}') {
@@ -186,6 +199,8 @@ public:
                 task.setDeadline(readString());
             } else if (key == "done") {
                 task.setDone(readBool());
+            } else if (key == "priority") {
+                task.setPriority(readInt());
             } else if (key == "tags") {
                 task.setTags(readStringArray());
             } else {
@@ -225,16 +240,43 @@ private:
     size_t pos;
 };
 
+// Проверка задачи, прочитанной из файла
+static void validateLoadedTask(const Task& task, const std::string& where) {
+    if (!task.getDeadline().empty() && !TaskManager::isValidDate(task.getDeadline())) {
+        throw std::runtime_error(where + ": wrong date in task " + std::to_string(task.getId()));
+    }
+    if (!TaskManager::isValidPriority(task.getPriority())) {
+        throw std::runtime_error(where + ": wrong priority in task " + std::to_string(task.getId()));
+    }
+}
+
+// Два одинаковых id сломали бы удаление и редактирование
+static void checkUniqueIds(const std::vector<Task>& list, const std::string& where) {
+    for (size_t i = 0; i < list.size(); i++) {
+        for (size_t j = i + 1; j < list.size(); j++) {
+            if (list[i].getId() == list[j].getId()) {
+                throw std::runtime_error(where + ": duplicate id " + std::to_string(list[i].getId()));
+            }
+        }
+    }
+}
+
+// ===== TaskManager =====
+
 TaskManager::TaskManager() : nextId(1) {}
 
-int TaskManager::addTask(const std::string& title, const std::string& deadline, const std::vector<std::string>& tags) {
+int TaskManager::addTask(const std::string& title, const std::string& deadline,
+                         const std::vector<std::string>& tags, int priority) {
     if (title.empty()) {
         throw std::invalid_argument("Title cannot be empty");
     }
     if (!deadline.empty() && !isValidDate(deadline)) {
         throw std::invalid_argument("Wrong date format, use YYYY-MM-DD");
     }
-    Task task(nextId, title, deadline, tags);
+    if (!isValidPriority(priority)) {
+        throw std::invalid_argument("Priority must be 1 (low), 2 (medium) or 3 (high)");
+    }
+    Task task(nextId, title, deadline, tags, priority);
     tasks.push_back(task);
     nextId++;
     return task.getId();
@@ -248,6 +290,39 @@ void TaskManager::removeTask(int id) {
 void TaskManager::markDone(int id) {
     int index = findIndex(id);
     tasks[index].setDone(true);
+}
+
+void TaskManager::editTask(int id,
+                           const std::optional<std::string>& title,
+                           const std::optional<std::string>& deadline,
+                           const std::optional<int>& priority) {
+    int index = findIndex(id);
+
+    // Шаг 1: проверяем всё, ничего не меняя
+    if (title && title->empty()) {
+        throw std::invalid_argument("Title cannot be empty");
+    }
+    if (deadline && !deadline->empty() && !isValidDate(*deadline)) {
+        throw std::invalid_argument("Wrong date format, use YYYY-MM-DD");
+    }
+    if (priority && !isValidPriority(*priority)) {
+        throw std::invalid_argument("Priority must be 1 (low), 2 (medium) or 3 (high)");
+    }
+
+    // Шаг 2: все данные верные — меняем
+    if (title) {
+        tasks[index].setTitle(*title);
+    }
+    if (deadline) {
+        tasks[index].setDeadline(*deadline);
+    }
+    if (priority) {
+        tasks[index].setPriority(*priority);
+    }
+}
+
+Task TaskManager::getTask(int id) const {
+    return tasks[findIndex(id)];
 }
 
 std::vector<Task> TaskManager::getAll() const {
@@ -275,16 +350,31 @@ std::vector<Task> TaskManager::searchByTag(const std::string& tag) const {
     return result;
 }
 
+// Сравнение по дедлайну: задачи без дедлайна уходят в конец
+static bool deadlineLess(const Task& a, const Task& b) {
+    if (a.getDeadline().empty()) {
+        return false;
+    }
+    if (b.getDeadline().empty()) {
+        return true;
+    }
+    return a.getDeadline() < b.getDeadline();
+}
+
 std::vector<Task> TaskManager::getSortedByDeadline() const {
     std::vector<Task> result = tasks;
-    std::sort(result.begin(), result.end(), [](const Task& a, const Task& b) {
-        if (a.getDeadline().empty()) {
-            return false;
+    // stable_sort сохраняет исходный порядок у задач с одинаковым дедлайном
+    std::stable_sort(result.begin(), result.end(), deadlineLess);
+    return result;
+}
+
+std::vector<Task> TaskManager::getSortedByPriority() const {
+    std::vector<Task> result = tasks;
+    std::stable_sort(result.begin(), result.end(), [](const Task& a, const Task& b) {
+        if (a.getPriority() != b.getPriority()) {
+            return a.getPriority() > b.getPriority();
         }
-        if (b.getDeadline().empty()) {
-            return true;
-        }
-        return a.getDeadline() < b.getDeadline();
+        return deadlineLess(a, b);
     });
     return result;
 }
@@ -309,6 +399,7 @@ std::string TaskManager::toJson(const std::vector<Task>& list) {
         out << "    \"title\": \"" << escapeJson(task.getTitle()) << "\",\n";
         out << "    \"deadline\": \"" << escapeJson(task.getDeadline()) << "\",\n";
         out << "    \"done\": " << (task.isDone() ? "true" : "false") << ",\n";
+        out << "    \"priority\": " << task.getPriority() << ",\n";
         out << "    \"tags\": [";
         std::vector<std::string> tags = task.getTags();
         for (size_t j = 0; j < tags.size(); j++) {
@@ -344,12 +435,14 @@ void TaskManager::loadFromJson(const std::string& filename) {
     std::stringstream buffer;
     buffer << file.rdbuf();
     JsonReader reader(buffer.str());
+
+    // Сначала читаем во временный вектор: если файл испорчен,
+    // текущие задачи не пропадут
     std::vector<Task> loaded = reader.readTasks();
     for (const Task& task : loaded) {
-        if (!task.getDeadline().empty() && !isValidDate(task.getDeadline())) {
-            throw std::runtime_error("JSON: wrong date in task " + std::to_string(task.getId()));
-        }
+        validateLoadedTask(task, "JSON");
     }
+    checkUniqueIds(loaded, "JSON");
     tasks = loaded;
     updateNextId();
 }
@@ -359,7 +452,8 @@ void TaskManager::saveToCsv(const std::string& filename) const {
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file for writing: " + filename);
     }
-    file << "id,title,deadline,done,tags\n";
+    // priority — последний столбец, чтобы старые CSV (без него) тоже читались
+    file << "id,title,deadline,done,tags,priority\n";
     for (const Task& task : tasks) {
         std::string tagsLine;
         std::vector<std::string> tags = task.getTags();
@@ -373,7 +467,8 @@ void TaskManager::saveToCsv(const std::string& filename) const {
              << escapeCsv(task.getTitle()) << ","
              << task.getDeadline() << ","
              << (task.isDone() ? "1" : "0") << ","
-             << escapeCsv(tagsLine) << "\n";
+             << escapeCsv(tagsLine) << ","
+             << task.getPriority() << "\n";
     }
 }
 
@@ -384,27 +479,33 @@ void TaskManager::loadFromCsv(const std::string& filename) {
     }
     std::vector<Task> loaded;
     std::string line;
-    int lineNumber = 0;
-    std::getline(file, line);
+    int lineNumber = 1;
+    std::getline(file, line);  // пропускаем заголовок
     while (std::getline(file, line)) {
         lineNumber++;
+        // В файлах из Windows строка может кончаться на \r
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
         if (line.empty()) {
             continue;
         }
+        std::string where = "CSV line " + std::to_string(lineNumber);
         std::vector<std::string> fields = splitCsvLine(line);
-        if (fields.size() != 5) {
-            throw std::runtime_error("CSV: wrong number of fields in line " + std::to_string(lineNumber + 1));
+        // 5 столбцов — файл версии 1.0, 6 — с приоритетом
+        if (fields.size() != 5 && fields.size() != 6) {
+            throw std::runtime_error(where + ": wrong number of fields");
         }
         Task task;
         try {
             task.setId(std::stoi(fields[0]));
+            if (fields.size() == 6) {
+                task.setPriority(std::stoi(fields[5]));
+            }
         } catch (const std::exception&) {
-            throw std::runtime_error("CSV: wrong id in line " + std::to_string(lineNumber + 1));
+            throw std::runtime_error(where + ": wrong number in id or priority");
         }
         task.setTitle(fields[1]);
-        if (!fields[2].empty() && !isValidDate(fields[2])) {
-            throw std::runtime_error("CSV: wrong date in line " + std::to_string(lineNumber + 1));
-        }
         task.setDeadline(fields[2]);
         task.setDone(fields[3] == "1");
         std::vector<std::string> tags;
@@ -416,8 +517,10 @@ void TaskManager::loadFromCsv(const std::string& filename) {
             }
         }
         task.setTags(tags);
+        validateLoadedTask(task, where);
         loaded.push_back(task);
     }
+    checkUniqueIds(loaded, "CSV");
     tasks = loaded;
     updateNextId();
 }
@@ -426,10 +529,13 @@ std::string TaskManager::toLower(const std::string& s) {
     std::string result;
     for (size_t i = 0; i < s.size(); i++) {
         unsigned char c = s[i];
+        // Латиница: 1 байт, справляется std::tolower
         if (c < 128) {
             result += static_cast<char>(std::tolower(c));
             continue;
         }
+        // Кириллица в UTF-8: 2 байта. Заглавные А-П (D0 90..9F) -> а-п (D0 B0..BF),
+        // Р-Я (D0 A0..AF) -> р-я (D1 80..8F), Ё (D0 81) -> ё (D1 91)
         if (i + 1 < s.size()) {
             unsigned char next = s[i + 1];
             if (c == 0xD0 && next >= 0x90 && next <= 0x9F) {
@@ -475,11 +581,16 @@ bool TaskManager::isValidDate(const std::string& date) {
         return false;
     }
     int daysInMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    // Високосный: делится на 4, но не на 100, или делится на 400
     bool leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
     if (leap) {
         daysInMonth[1] = 29;
     }
     return day <= daysInMonth[month - 1];
+}
+
+bool TaskManager::isValidPriority(int priority) {
+    return priority >= Task::PRIORITY_LOW && priority <= Task::PRIORITY_HIGH;
 }
 
 int TaskManager::findIndex(int id) const {
@@ -491,6 +602,7 @@ int TaskManager::findIndex(int id) const {
     throw std::out_of_range("Task with id " + std::to_string(id) + " not found");
 }
 
+// После загрузки из файла следующий id = максимальный + 1
 void TaskManager::updateNextId() {
     nextId = 1;
     for (const Task& task : tasks) {
